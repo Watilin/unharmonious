@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Harmonieux… Ou pas</title>
+</head>
+<body>
+
+<p>
+  <label>
+    <input type="checkbox" /> Play
+  </label>
+</p>
+
+<p>
+  <label>
+    Rapport&#x202F;:
+    <input type="range" min="1" max="2" step="0.0001" />
+  </label>
+  <code>&nbsp;</code>
+</p>
+
+
+<p>
+  Gamme pythagoricienne&#x202F;:
+  <button> 1                       </button>
+  <button> 9/8 (ton majeur)        </button>
+  <button> 6/5 (tierce mineure)    </button>
+  <button> 5/4 (tierce majeure)    </button>
+  <button> 4/3 (quarte)            </button>
+  <button> 7/5                     </button>
+  <button> 3/2 (quinte juste)      </button>
+  <button> 8/5 (sixte mineure)     </button>
+  <button> 5/3 (sixte majeure)     </button>
+  <button> 7/4                     </button>
+  <button> 9/5 (septième mineure)  </button>
+  <button> 15/8 (septième majeure) </button>
+  <button> 2 (octave)              </button>
+</p>
+
+<p>
+  Tempérament égal&#x202F;:
+  <button> 1 (la)      </button>
+  <button> 1.059       </button>
+  <button> 1.122 (si)  </button>
+  <button> 1.189 (do)  </button>
+  <button> 1.259       </button>
+  <button> 1.334 (ré)  </button>
+  <button> 1.414       </button>
+  <button> 1.498 (mi)  </button>
+  <button> 1.587 (fa)  </button>
+  <button> 1.681       </button>
+  <button> 1.781 (sol) </button>
+  <button> 1.887       </button>
+  <button> 2 (la)      </button>
+</p>
+
+<p>
+  Gamme dégueulasse&#x202F;:
+  <button> 1    </button>
+  <button> 8/7  </button>
+  <button> 9/7  </button>
+  <button> 10/7 </button>
+  <button> 11/7 </button>
+  <button> 12/7 </button>
+  <button> 13/7 </button>
+  <button> 2    </button>
+</p>
+
+<p>
+  <canvas id="freq-canvas" width="600" height="200"></canvas>
+</p>
+<p>
+  <canvas id="signal-canvas" width="600" height="200"></canvas>
+</p>
+
+<ul>
+  <li>
+    <a target="_blank" rel="noopener noreferrer nofollow" href="https://youtu.be/cTYvCpLRwao">https://youtu.be/cTYvCpLRwao</a>
+  </li>
+  <li>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://fr.wikipedia.org/wiki/Intervalle_%28musique%29#Intervalles_purs">https://fr.wikipedia.org/wiki/Intervalle_%28musique%29#Intervalles_purs</a>
+  </li>
+</ul>
+
+<script> "use strict";
+
+const MAGNETIC_SENSITIVITY = 1/48;
+
+var $checkbox     = document.querySelector("input[type='checkbox']");
+var $range        = document.querySelector("input[type='range']");
+var $code         = document.querySelector("code");
+var $freqCanvas   = document.querySelector("#freq-canvas");
+var $signalCanvas = document.querySelector("#signal-canvas");
+
+$checkbox.checked = false;
+$code.textContent = $range.value;
+
+var acx = new AudioContext();
+var primOscillator;
+var secOscillator;
+var analyser = acx.createAnalyser();
+analyser.connect(acx.destination);
+
+var fcx = $freqCanvas.getContext("2d");
+var scx = $signalCanvas.getContext("2d");
+
+var animId = NaN;
+
+function drawFrequency() {
+  fcx.clearRect(0, 0, $freqCanvas.width, $freqCanvas.height);
+
+  var xScale = 4.2 * Math.PI / $freqCanvas.width;
+  var xLabelScale = $freqCanvas.width / 4.2;
+  var xOffset = -0.1 * Math.PI;
+  var yScale = -$freqCanvas.height / 2 + 4;
+  var yOffset = $freqCanvas.height / 2;
+  var intYOffset = yOffset | 0;
+  var ratio = Number.parseFloat($range.value);
+
+  fcx.beginPath();
+  fcx.moveTo(0,             intYOffset - 0.5);
+  fcx.lineTo($freqCanvas.width, intYOffset - 0.5);
+  for (let i = 0; i <= 4; i++) {
+    fcx.moveTo(((0.1 + i) * xLabelScale | 0) - 0.5, intYOffset - 6);
+    fcx.lineTo(((0.1 + i) * xLabelScale | 0) - 0.5, intYOffset + 6);
+    fcx.moveTo(((0.6 + i) * xLabelScale | 0) - 0.5, intYOffset - 3);
+    fcx.lineTo(((0.6 + i) * xLabelScale | 0) - 0.5, intYOffset + 3);
+  }
+  fcx.strokeStyle = "black";
+  fcx.lineWidth = 1;
+  fcx.stroke();
+
+  fcx.beginPath();
+  fcx.moveTo(0, yOffset + yScale * Math.sin(xOffset));
+  for (let x = 1; x < $freqCanvas.width; x++) {
+    fcx.lineTo(x, yOffset + yScale * Math.sin(xOffset + x * xScale));
+  }
+  fcx.strokeStyle = "#D00";
+  fcx.lineWidth = 2;
+  fcx.stroke();
+
+  fcx.beginPath();
+  fcx.moveTo(0, yOffset + yScale * Math.sin(ratio * xOffset));
+  for (let x = 1; x < $freqCanvas.width; x++) {
+    fcx.lineTo(x, yOffset + yScale * Math.sin(ratio * (xOffset + x * xScale)));
+  }
+  fcx.strokeStyle = "#04F";
+  fcx.lineWidth = 1;
+  fcx.stroke();
+}
+
+function updateSecFrequency() {
+  var ratio = Number.parseFloat($range.value);
+  var freq = 440 * ratio;
+  if (secOscillator) {
+    secOscillator.frequency.value = freq;
+  }
+  drawFrequency();
+}
+
+$checkbox.addEventListener("change", function (event) {
+  if (this.checked) {
+    primOscillator = acx.createOscillator();
+    primOscillator.connect(analyser);
+    primOscillator.start();
+    visualize();
+
+    secOscillator = acx.createOscillator();
+    secOscillator.connect(analyser);
+    updateSecFrequency();
+    secOscillator.start();
+  }
+  else if (primOscillator) {
+    primOscillator.stop();
+    secOscillator.stop();
+    cancelAnimationFrame(animId);
+  }
+});
+
+$range.addEventListener("change", function (event) {
+  $code.textContent = $range.value;
+  updateSecFrequency();
+});
+
+var isRangeSliding = false;
+$range.addEventListener("mousedown", function (event) {
+  isRangeSliding = true;
+});
+
+document.addEventListener("mouseup", function (event) {
+  isRangeSliding = false;
+});
+
+document.addEventListener("mousemove", function (event) {
+  if (isRangeSliding) {
+    $code.textContent = $range.value;
+    updateSecFrequency();
+  }
+});
+
+document.addEventListener("click", function (event) {
+  var $target = event.target;
+  if ("BUTTON" === $target.tagName) {
+    let match = $target.textContent.match(/([\d.]+)(?:\/(\d+))?/);
+    if (match[2]) {
+      $range.value = Number.parseFloat(match[1]) / Number.parseFloat(match[2]);
+    }
+    else {
+      $range.value = Number.parseFloat(match[1]);
+    }
+    $code.textContent = $range.value;
+    updateSecFrequency();
+  }
+});
+
+// fonction plagiée depuis https://mdn.github.io/voice-change-o-matic/
+function visualize() {
+  var w = $signalCanvas.width;
+  var h = $signalCanvas.height;
+
+  //var visualSetting = visualSelect.value;
+  var visualSetting = "sinewave";
+  //console.log(visualSetting);
+
+  if(visualSetting == "sinewave") {
+    analyser.fftSize = 2048;
+    var bufferLength = analyser.fftSize;
+    console.log(bufferLength);
+    var dataArray = new Uint8Array(bufferLength);
+
+    scx.clearRect(0, 0, w, h);
+
+    var draw = function () {
+      animId = requestAnimationFrame(draw);
+
+      analyser.getByteTimeDomainData(dataArray);
+
+      scx.fillStyle = 'rgb(200, 200, 200)';
+      scx.fillRect(0, 0, w, h);
+
+      scx.lineWidth = 2;
+      scx.strokeStyle = 'rgb(0, 0, 0)';
+
+      scx.beginPath();
+
+      var sliceWidth = w * 1.0 / bufferLength;
+      var x = 0;
+
+      for(var i = 0; i < bufferLength; i++) {
+
+        var v = dataArray[i] / 128.0;
+        var y = v * h/2;
+
+        if(i === 0) {
+          scx.moveTo(x, y);
+        } else {
+          scx.lineTo(x, y);
+        }
+
+        x += sliceWidth;
+      }
+
+      scx.lineTo(w, h/2);
+      scx.stroke();
+    };
+
+    draw();
+  }
+
+  //else if(visualSetting == "frequencybars") {
+  //  analyser.fftSize = 256;
+  //  var bufferLengthAlt = analyser.frequencyBinCount;
+  //  console.log(bufferLengthAlt);
+  //  var dataArrayAlt = new Uint8Array(bufferLengthAlt);
+  //
+  //  scx.clearRect(0, 0, WIDTH, HEIGHT);
+  //
+  //  var drawAlt = function() {
+  //    drawVisual = requestAnimationFrame(drawAlt);
+  //
+  //    analyser.getByteFrequencyData(dataArrayAlt);
+  //
+  //    scx.fillStyle = 'rgb(0, 0, 0)';
+  //    scx.fillRect(0, 0, WIDTH, HEIGHT);
+  //
+  //    var barWidth = (WIDTH / bufferLengthAlt) * 2.5;
+  //    var barHeight;
+  //    var x = 0;
+  //
+  //    for(var i = 0; i < bufferLengthAlt; i++) {
+  //      barHeight = dataArrayAlt[i];
+  //
+  //      scx.fillStyle = 'rgb(' + (barHeight+100) + ',50,50)';
+  //      scx.fillRect(x,HEIGHT-barHeight/2,barWidth,barHeight/2);
+  //
+  //      x += barWidth + 1;
+  //    }
+  //  };
+  //
+  //  drawAlt();
+  //
+  //} else if(visualSetting == "off") {
+  //  scx.clearRect(0, 0, WIDTH, HEIGHT);
+  //  scx.fillStyle = "red";
+  //  scx.fillRect(0, 0, WIDTH, HEIGHT);
+  //}
+
+}
+
+</script>
+</body>
+</html>

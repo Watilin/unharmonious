@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Construire un accord</title>
+</head>
+<body>
+
+<form>
+  <p>
+    <label for="root">Fréquence fondamentale&#x202F;:</label>
+    <input id="root" type="number" value="432" min="0" max="20000" />
+  </p>
+
+  <p>
+    <input type="submit" id="play" value="Jouer" />
+  </p>
+</form>
+
+<script> "use strict";
+
+var oscWrapperProto = {
+  audioContext: null,
+  wrappedOsc: null,
+  isPlaying: false,
+
+  start() {
+    if (this.isPlaying) {
+      this.wrappedOsc.stop();
+      this.isPlaying = false;
+    }
+
+    let osc = this.audioContext.createOscillator();
+    osc.connect(this.audioContext.destination);
+    osc.frequency.value = this.frequency;
+    this.wrappedOsc = osc;
+    osc.start();
+    this.isPlaying = true;
+  },
+
+  stop() {
+    this.wrappedOsc.stop();
+  },
+
+  get frequency() {
+    return this.wrappedOsc.frequency.value;
+  },
+
+  set frequency(value) {
+    this.wrappedOsc.frequency.value = value;
+  },
+};
+
+function createOscWrapper(options = {}) {
+  var ow = Object.create(oscWrapperProto);
+  var acx = createOscWrapper.audioContext;
+  if (!acx) {
+    acx = createOscWrapper.audioContext = new AudioContext();
+  }
+  ow.audioContext = acx;
+  ow.wrappedOsc = acx.createOscillator();
+  if ("frequency" in options) {
+    ow.wrappedOsc.frequency.value = options.frequency;
+  }
+  ow.wrappedOsc.connect(acx.destination);
+
+  return ow;
+}
+
+var wrappers = new Array(3).fill(null).map(() => createOscWrapper());
+
+var $form = document.querySelector("form");
+var $play = document.querySelector("#play");
+var $root = document.querySelector("#root");
+
+function updateOscillators(rootFreq) {
+  wrappers[0].frequency = rootFreq;
+  wrappers[1].frequency = rootFreq * 5/4;
+  wrappers[2].frequency = rootFreq * 3/2;
+}
+
+updateOscillators(Number.parseInt($root.value, 10));
+
+$root.addEventListener("change", (ev) => {
+  updateOscillators(Number.parseFloat($root.value));
+});
+
+$form.addEventListener("submit", (ev) => {
+  ev.preventDefault();
+
+  for (let i = 0; i < wrappers.length; i++) {
+    setTimeout(() => { wrappers[i].start(); }, 500 * i);
+    setTimeout(() => { wrappers[i].stop();  }, wrappers.length + 3000);
+  }
+});
+
+</script>
+</body>
+</html>
